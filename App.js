@@ -1,3 +1,4 @@
+//Practica 2
 // Sirve para crear la "memoria" de la aplicación.
 // Permite que la pantalla se actualice automáticamente cuando los datos cambian.
 import { useState } from 'react';
