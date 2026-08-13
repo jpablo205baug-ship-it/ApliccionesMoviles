@@ -1,146 +1,237 @@
-// Sirve para crear la "memoria" de la aplicación.
-// Permite que la pantalla se actualice automáticamente cuando los datos cambian.
-import { useState } from 'react';
-
-// Importamos los componentes preconstruidos de React Native
-import { 
-  StyleSheet,       // Para crear los estilos (es el motor de CSS de React Native).
-  Text,             // Para mostrar cualquier texto en pantalla.
-  View,             // El contenedor principal .
-  TextInput,        // La caja donde el usuario escribe (equivalente a <input type="text">).
-  Button,           // Un botón nativo.
-  FlatList,         // Una lista inteligente que solo renderiza los elementos que caben en pantalla.
-  TouchableOpacity  // Un contenedor que hace que su contenido reaccione al toque oscureciéndose.
+import { useState, useEffect } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  FlatList,
+  Image,
+  Alert,
+  ActivityIndicator,
+  Button // 1. Solución: Importar Button
 } from 'react-native';
 
-// FUNCIÓN PRINCIPAL El componente que representa la pantalla entera
 export default function App() {
-  
-  // ZONA DE ESTADOS (La memoria a corto plazo la nuestra app)
-   
-  // 'tarea' guarda lo que el usuario está escribiendo en el momento.
-  // 'setTarea' es la función que usamos para modificar ese texto.
-  // Inicia como un texto completamente vacío: ''.
-  const [tarea, setTarea] = useState('');
-  
-  // Estado para la lista completa:
-  // 'listaTareas' guarda todo el historial de tareas creadas.
-  // 'setListaTareas' es la función para actualizar esa lista general.
-  // Inicia como un arreglo vacío: [].
-  const [listaTareas, setListaTareas] = useState([]);
+  const [pantallaActual, setPantallaActual] = useState('registro');
 
-  // ZONA DE LÓGICA - las acciones del usuario
+  const [nombre, setNombre] = useState('');
+  const [correo, setCorreo] = useState('');
+  const [telefono, setTelefono] = useState('');
 
-  // Función cuando el usuario presiona el botón "Agregar"
-  const agregarTarea = () => {
-    // .trim() quita los espacios en blanco al inicio y al final.
-    // Si después de quitar espacios el texto está vacío, usamos 'return' para detener la función
-    // y evitar que se agreguen "tareas invisibles" a la lista.
-    if (tarea.trim() === '') return; 
-    
-    // Actualizamos la lista de tareas poniendo el nuevo dato:
-    // Usamos el operador de propagación (...) para copiar todas las tareas viejas que ya existían.
-    // Agregamos un nuevo objeto al final con dos propiedades fundamentales:
-    //  -id: Usamos Date.now().toString() para generar un identificador único basado 
-    //  en los milisegundos de la hora exacta.
-    //  -texto: El contenido que el usuario escribió (que está guardado en la variable 'tarea').
-    setListaTareas([...listaTareas, { id: Date.now().toString(), texto: tarea }]);
-    
-    // Una vez guardada la tarea en la lista, limpiamos la caja de texto
-    // devolviendo el estado 'tarea' a un string vacío.
-    setTarea('');
+  const [empleados, setEmpleados] = useState([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    descargarEmpleados();
+  }, []);
+
+  const descargarEmpleados = async () => {
+    try {
+      const respuesta = await fetch("https://randomuser.me/api/?results=5");
+      const json = await respuesta.json();
+
+      const empleadosAdaptados = json.results.map((user) => ({
+        id: user.login.uuid,
+        nombre: `${user.name.first} ${user.name.last}`,
+        correo: user.email,
+        telefono: user.phone,
+        imagen: user.picture.large
+      }));
+
+      setEmpleados(empleadosAdaptados);
+      setCargando(false);
+    } catch (error) {
+      console.error("Hubo un problema descargando los datos: ", error);
+      setCargando(false);
+    }
   };
 
-  // ZONA DE RENDERIZADO lo que el usuario ve en la pantalla de su teléfono
-  return (
-    // 'View' es el contenedor padre que envuelve a toda la aplicación
-    <View style={styles.contenedor}>
-      
-      {/* Título principal de la aplicación */}
-      <Text style={styles.titulo}>Mis Tareas Pendientes</Text>
+  const agregarEmpleadoManual = () => {
+    if (!nombre.trim() || !correo.trim() || !telefono.trim()) {
+      Alert.alert('Error', 'Todos los campos son obligatorios.');
+      return;
+    }
 
-      {/* Contenedor agrupar la caja de texto y el botón en la misma línea */}
-      <View style={styles.zonaInput}>
-        
-        {/* Caja de texto interactiva */}
-        <TextInput 
-          style={styles.input}
-          placeholder="Escribe una tarea..." // Texto fantasma de ayuda cuando está vacío
-          value={tarea} // Conectamos el valor visible de la caja a nuestra variable de memoria 'tarea'
-          
-          // Cada vez que el usuario teclea una letra, 
-          // actualizamos el estado 'tarea' inmediatamente.
-          onChangeText={setTarea} 
-        />
-        
-        {/* Botón que dispara la lógica de guardado */}
-        <Button 
-          title="Agregar" 
-          onPress={agregarTarea} // Evento de toque 
-          color="#005691" 
+    if (!correo.includes('@') || !correo.includes('.')) {
+      Alert.alert('Error', 'Ingresa un correo electrónico válido.');
+      return;
+    }
+
+    if (telefono.length !== 10) {
+      Alert.alert('Error', 'El número de teléfono debe tener exactamente 10 dígitos.');
+      return;
+    }
+
+    const nuevoEmpleado = {
+      id: Date.now().toString(),
+      nombre: nombre,
+      correo: correo,
+      telefono: telefono,
+      imagen: `https://i.pravatar.cc/150?u=${Date.now()}`
+    };
+
+    setEmpleados([nuevoEmpleado, ...empleados]);
+
+    Alert.alert('¡Registro Exitoso!', `Hola ${nombre}, tu cuenta ha sido creada.`);
+
+    setNombre('');
+    setCorreo('');
+    setTelefono('');
+  };
+
+  if (cargando) {
+    return (
+      <View style={styles.pantallaCentrada}>
+        <ActivityIndicator size="large" color="#005691" />
+        <Text style={styles.textoCarga}>Descargando Empleados...</Text>
+      </View>
+    );
+  } // Faltaba cerrar esta llave
+
+  if (pantallaActual === 'lista') {
+    return (
+      <View style={styles.contenedor}>
+        <Text style={styles.tituloPrincipal}>Lista de Empleados</Text>
+        <View style={styles.espaciadoBoton}>
+          <Button title="Nuevo empleado" onPress={() => setPantallaActual('registro')} color="#28a745" />
+        </View>
+
+        <FlatList
+          data={empleados}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <View style={styles.tarjetaEmpleado}>
+              <Image
+                source={{ uri: item.imagen }} 
+                style={styles.imagenPerfil}
+              />
+
+              <View style={styles.infoEmpleado}>
+                {/* 8. Solución: Ajuste de nombres de estilos para que coincidan con el StyleSheet */}
+                <Text style={styles.nombreEmpleado}>{item.nombre}</Text>
+                <Text style={styles.textoDetalle}>{item.correo}</Text>
+                <Text style={styles.textoDetalle}>{item.telefono}</Text>
+              </View>
+            </View>
+          )}
         />
       </View>
+    );
+  }
 
-      {/* Lista inteligente y optimizada para móviles */}
-      <FlatList 
-        // 'data' responde a la pregunta: ¿De dónde saco la información? 
-        data={listaTareas} 
-        
-        // 'keyExtractor' responde a: ¿Cómo identifico cada elemento de forma única para no confundirme?
-        keyExtractor={(item) => item.id} 
-        
-        // 'renderItem' responde a: ¿Cómo quieres que dibuje visualmente cada elemento de la lista?
-        renderItem={({ item }) => (
-          // Usamos TouchableOpacity para que los alumnos vean cómo reacciona al toque
-          <TouchableOpacity style={styles.cajaTarea}>
-            {/* Extraemos e imprimimos la propiedad 'texto' del objeto actual */}
-            <Text style={styles.textoTarea}>{item.texto}</Text>
-          </TouchableOpacity>
-        )}
+  return (
+    <View style={styles.contenedor}>
+      <Text style={styles.tituloPrincipal}>Crear Empleado</Text>
+
+      <Text style={styles.etiqueta}>Nombre:</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Ej. Juan Pérez"
+        value={nombre}
+        onChangeText={setNombre}
       />
+
+      <Text style={styles.etiqueta}>Correo electrónico:</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="juan@gmail.com"
+        value={correo}
+        onChangeText={setCorreo}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+
+      <Text style={styles.etiqueta}>Teléfono:</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="10 dígitos"
+        value={telefono}
+        onChangeText={setTelefono}
+        keyboardType="phone-pad"
+        maxLength={10}
+      />
+
+      <View style={styles.espaciadoBoton}>
+        <Button title="Registrar Empleado" onPress={agregarEmpleadoManual} color="#1ad320" />
+      </View>
+      <Button title="Ver Empleados" onPress={() => setPantallaActual('lista')} color="#005691" />
     </View>
   );
 }
 
-// ZONA DE ESTILOS (El diseño visual estructurado)
 const styles = StyleSheet.create({
   contenedor: {
-    flex: 1, // Toma todo el alto disponible de la pantalla del celular
-    backgroundColor: '#ffffff', // Fondo totalmente blanco
-    paddingTop: 60, // Da un margen superior grande para que la app no se encime con el reloj o la cámara del celular
-    paddingHorizontal: 20, // Márgenes a los lados para que nada pegue con los bordes de la pantalla
+    flex: 1,
+    backgroundColor: '#f4f7f6',
+    paddingTop: 60,
+    paddingHorizontal: 20
   },
-  titulo: {
-    fontSize: 24, // Tamaño de letra para el encabezado
-    fontWeight: 'bold', // Tipografía en negrita
-    marginBottom: 20, // Separación inferior para que no se pegue con la caja de texto
-    textAlign: 'center', // Centrado perfecto
-    color: '#333', // Un gris muy oscuro (más elegante que el negro puro)
+  pantallaCentrada: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffffff'
   },
-  zonaInput: {
-    flexDirection: 'row', // Regla de Flexbox vital: Coloca el Input y el Botón uno al lado del otro (horizontal)
-    justifyContent: 'space-between', // Separa los elementos empujándolos a los extremos
-    marginBottom: 20, // Separación inferior con el inicio de la lista
+  textoCarga: {
+    marginTop: 15,
+    fontSize: 16,
+    color: '#555'
+  },
+  tituloPrincipal: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 20,
+    textAlign: 'center'
+  },
+  etiqueta: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#444',
+    marginBottom: 5
   },
   input: {
-    flex: 1, // Le dice a la caja de texto: "Toma todo el espacio sobrante que el botón no esté usando"
-    borderWidth: 1, // Dibuja una línea de borde
-    borderColor: '#cccccc', // Color gris claro para el borde
-    borderRadius: 8, // Esquinas redondeadas suaves
-    paddingHorizontal: 15, // Espacio interno para que el texto que escriben no pegue con el borde
-    marginRight: 10, // Separación a la derecha para no chocar físicamente con el botón "Agregar"
-    height: 45, // Altura cómoda para que el dedo del usuario pueda tocarla sin problema
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d1d1d1',
+    borderRadius: 8,
+    paddingHorizontal: 15,
+    height: 45,
+    marginBottom: 15
   },
-  cajaTarea: {
-    backgroundColor: '#f9f9f9', // Fondo ligeramente gris para separar visualmente cada tarea del fondo blanco
-    padding: 15, // Espacio interno para que el texto de la tarea respire
-    borderRadius: 8, // Esquinas redondeadas
-    marginBottom: 10, // Espacio entre una tarea y la que sigue abajo
-    borderWidth: 1, // Borde perimetral
-    borderColor: '#eeeeee', // Gris ultra claro para un diseño limpio
+  espaciadoBoton: {
+    marginBottom: 15
   },
-  textoTarea: {
-    fontSize: 16, // Tamaño de lectura estándar en móviles
-    color: '#444', // Gris oscuro para buen contraste y legibilidad
+  tarjetaEmpleado: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 15,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4
+  },
+  imagenPerfil: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginRight: 15
+  },
+  infoEmpleado: {
+    flex: 1,
+    justifyContent: 'center'
+  },
+  nombreEmpleado: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#222'
+  },
+  textoDetalle: {
+    fontSize: 14,
+    color: '#555',
+    marginTop: 3
   }
 });
