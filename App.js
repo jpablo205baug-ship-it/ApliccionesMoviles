@@ -1,146 +1,276 @@
-// Sirve para crear la "memoria" de la aplicación.
-// Permite que la pantalla se actualice automáticamente cuando los datos cambian.
-import { useState } from 'react';
+import { useState } from "react";
+import { StyleSheet, Text, View, FlatList, Image, TouchableOpacity, Alert, Modal } from "react-native";
 
-// Importamos los componentes preconstruidos de React Native
-import { 
-  StyleSheet,       // Para crear los estilos (es el motor de CSS de React Native).
-  Text,             // Para mostrar cualquier texto en pantalla.
-  View,             // El contenedor principal .
-  TextInput,        // La caja donde el usuario escribe (equivalente a <input type="text">).
-  Button,           // Un botón nativo.
-  FlatList,         // Una lista inteligente que solo renderiza los elementos que caben en pantalla.
-  TouchableOpacity  // Un contenedor que hace que su contenido reaccione al toque oscureciéndose.
-} from 'react-native';
+//Importamos el motor de la camara y los iconos nativos
+import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 
-// FUNCIÓN PRINCIPAL El componente que representa la pantalla entera
 export default function App() {
-  
-  // ZONA DE ESTADOS (La memoria a corto plazo la nuestra app)
-   
-  // 'tarea' guarda lo que el usuario está escribiendo en el momento.
-  // 'setTarea' es la función que usamos para modificar ese texto.
-  // Inicia como un texto completamente vacío: ''.
-  const [tarea, setTarea] = useState('');
-  
-  // Estado para la lista completa:
-  // 'listaTareas' guarda todo el historial de tareas creadas.
-  // 'setListaTareas' es la función para actualizar esa lista general.
-  // Inicia como un arreglo vacío: [].
-  const [listaTareas, setListaTareas] = useState([]);
+  //'galería' guarda las fotos
+  const [galeria, setGaleria] = useState([]);
+  // Seleccionadas guarda unicamente los ID de que el usuario marco
+  const [seleccionadas, setSeleccionadas] = useState([]);
+  //Guarda la ruta de la foto tomada, si es 'null' el visor esta apagado
+  const [fotoExpandida, setFotoExpandida] = useState(null);
 
-  // ZONA DE LÓGICA - las acciones del usuario
+  //Usamos 'async' porque abrir la camara toma timepo y la app debe "esperar"
+  const tomarFoto = async () => {
+    //1. Evitar que tomen más de 6 Fotos
+    if(galeria.length >= 6){
+      Alert.alert('Galería Llena','Solo puedes tener un máximo de 6 Fotografías.');
+      return; //Detiene la función inmediatamente
+    }
+    // 2. Solicitar permisos al sistema operativo del celular
+    const permisos = await ImagePicker.requestCameraPermissionsAsync();
+    if(permisos.status !== 'granted'){
+      Alert.alert('Permiso Denegado', 'Necesitamos acceso a la cámara.');
+      return;
+    }
+    // 3. Configurar y abrir camara
+    const resultado = await ImagePicker.launchCameraAsync({
+      allowsEditing: true, //Abre la pantalla intermedia para recortar la foto
+      aspect: [1,1],       // Obliga a que el recorte sea un cuadrado perfecto (1:1)
+      quality: 0.5,        //Comprime la foto al 50% para no llenar la memoria del teléfono
+    });
 
-  // Función cuando el usuario presiona el botón "Agregar"
-  const agregarTarea = () => {
-    // .trim() quita los espacios en blanco al inicio y al final.
-    // Si después de quitar espacios el texto está vacío, usamos 'return' para detener la función
-    // y evitar que se agreguen "tareas invisibles" a la lista.
-    if (tarea.trim() === '') return; 
-    
-    // Actualizamos la lista de tareas poniendo el nuevo dato:
-    // Usamos el operador de propagación (...) para copiar todas las tareas viejas que ya existían.
-    // Agregamos un nuevo objeto al final con dos propiedades fundamentales:
-    //  -id: Usamos Date.now().toString() para generar un identificador único basado 
-    //  en los milisegundos de la hora exacta.
-    //  -texto: El contenido que el usuario escribió (que está guardado en la variable 'tarea').
-    setListaTareas([...listaTareas, { id: Date.now().toString(), texto: tarea }]);
-    
-    // Una vez guardada la tarea en la lista, limpiamos la caja de texto
-    // devolviendo el estado 'tarea' a un string vacío.
-    setTarea('');
+    // 4. Procesar el resultado: Si el usuario NO canceló la captura
+    if(!resultado.canceled){
+      // Creamos un nuevo objeto empaquetado la ruta de la foto y un ID unico basado en la hora actual
+      const nuevaFoto = {
+        id: Date.now().toString(),
+        uri: resultado.assets[0].uri,
+      };
+      //Clonamos la galaería anterior y le inyectamos la foto nueva al final
+      setGaleria([...galeria, nuevaFoto]);
+    }
   };
 
-  // ZONA DE RENDERIZADO lo que el usuario ve en la pantalla de su teléfono
+  //Esta función se dispara cuando el usuario Mantiene Presionada una foto
+  const alternarSeleccion = (idFoto) => {
+    // Si la foto esta en el carrito de seleccionadas
+    if(seleccionadas.includes(idFoto)) {
+      setSeleccionadas(seleccionadas.filter((id) => id !== idFoto));
+    } else {
+      setSeleccionadas([...seleccionadas, idFoto]);
+    }
+  };
+
+  //Dispara el boton de la esquina inferior derecha
+  const seleccionarTodas = () => {
+    //Si todas estan marcadas
+    if(seleccionadas.length === galeria.length) {
+      setSeleccionadas([]); //Vaciamos el carrito (Desmarcar todas)
+    } else {
+      const todosLosIds = galeria.map((foto) => foto.id);
+      setSeleccionadas(todosLosIds);
+    }
+  };
+
+  // Esta función se dispara con el botón de basura
+  const borrarSeleccionadas = () => {
+    Alert.alert(
+      'Confirmar Borrado',
+      `¿Eliminar ${seleccionadas.length} foto(s)?`,
+      [
+        {text: 'Cancelar', style: 'cancel'},
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: () => {
+            // Filtamos la galería para unicamente quedarnos con las fotos quesu ID no este en la lsita
+            const galeriaFiltrada = galeria.filter((foto) => !seleccionadas.includes(foto.id));
+            setGaleria(galeriaFiltrada);
+            setSeleccionadas([]); //Limpiamos el carrito despues de borrar
+          }
+        }
+      ]
+    );
+  };
+
   return (
-    // 'View' es el contenedor padre que envuelve a toda la aplicación
     <View style={styles.contenedor}>
       
-      {/* Título principal de la aplicación */}
-      <Text style={styles.titulo}>Mis Tareas Pendientes</Text>
-
-      {/* Contenedor agrupar la caja de texto y el botón en la misma línea */}
-      <View style={styles.zonaInput}>
-        
-        {/* Caja de texto interactiva */}
-        <TextInput 
-          style={styles.input}
-          placeholder="Escribe una tarea..." // Texto fantasma de ayuda cuando está vacío
-          value={tarea} // Conectamos el valor visible de la caja a nuestra variable de memoria 'tarea'
-          
-          // Cada vez que el usuario teclea una letra, 
-          // actualizamos el estado 'tarea' inmediatamente.
-          onChangeText={setTarea} 
-        />
-        
-        {/* Botón que dispara la lógica de guardado */}
-        <Button 
-          title="Agregar" 
-          onPress={agregarTarea} // Evento de toque 
-          color="#005691" 
-        />
+      {/* Encabezado */}
+      <View style={styles.encabezado}>
+        <Text style={styles.titulo}>Mi Galería</Text>
+        <Text style={styles.contadorTexto}>Fotografías: {galeria.length} / 6</Text>
       </View>
 
-      {/* Lista inteligente y optimizada para móviles */}
-      <FlatList 
-        // 'data' responde a la pregunta: ¿De dónde saco la información? 
-        data={listaTareas} 
-        
-        // 'keyExtractor' responde a: ¿Cómo identifico cada elemento de forma única para no confundirme?
-        keyExtractor={(item) => item.id} 
-        
-        // 'renderItem' responde a: ¿Cómo quieres que dibuje visualmente cada elemento de la lista?
-        renderItem={({ item }) => (
-          // Usamos TouchableOpacity para que los alumnos vean cómo reacciona al toque
-          <TouchableOpacity style={styles.cajaTarea}>
-            {/* Extraemos e imprimimos la propiedad 'texto' del objeto actual */}
-            <Text style={styles.textoTarea}>{item.texto}</Text>
+      {/* Zona Cental: La cuadricula de Fotos */}
+      {galeria.length === 0 ? (
+        //Renderizado Condicional: Si no hay fotos mostramos este icono gigante
+        <View style={styles.estadoVacio}>
+          <Ionicons name="images-outline" size={60} color="#ccc"/>
+          <Text style={styles.textoVacio}>Aún no has tomado ninguna foto.</Text>
+        </View>
+      ) : (
+        //Si si hay fotos, dibujamos la lista inteligente de 2 columnas
+        <FlatList
+          data={galeria}
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          style={styles.lista}
+          renderItem={({item}) => {
+            // Verifcamos si esta foto especifica esta dentro de nuestro carrito
+            const estaSeleccionada = seleccionadas.includes(item.id);
+
+            return (
+              <TouchableOpacity
+                style={styles.contenedorFoto}
+                //Toque rápido: Abre el Modal enviandole la ruta de la imagen
+                onPress={() => setFotoExpandida(item.uri)}
+                //Toque Largo: Activa  el modo selección pasandole el ID
+                onLongPress={() => alternarSeleccion(item.id)}
+              >
+                {/*Dibujamos la imagen. si esta seleccionada, le aplicamos estilos extra (borde rojo) */}
+                <Image
+                  source={{uri: item.uri}}
+                  style={[styles.imagen, estaSeleccionada && styles.imagenSeleccionada]}
+                />
+
+                {/* Si la Foto está seleccionada, sobreponemos el icono de la palomita */}
+                {estaSeleccionada && (
+                  <View style={styles.checkOverlay}>
+                    <Ionicons name="checkmark-circle" size={24} color="#e74c3c" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          }}
+        />
+      )}
+
+      { /* Controladores inferiores */}
+      <View style={styles.controlesAbajo}>
+        {/* 1. Boton principal centrado (Tomar Foto) */}
+        <TouchableOpacity
+          style={[styles.botonPrincipal, galeria.length >= 6 && styles.botonPrincipalDeshabilitado]}
+          onPress={tomarFoto}
+          disabled={galeria.length >= 6}
+        >
+          <Ionicons name="camera" size={24} color="white" />
+          <Text style={styles.textoBotonPrincipal}>Tomar Foto</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/*2. Fila Secundaria: Contiene los botones de Eliminar y Seleccionar */}
+      <View style={styles.filaSecundaria}>
+      
+        {/*Lazo Izquierdo: Boton elminar (Opcional) */}
+        <View style={styles.mitadFila}>
+          {seleccionadas.length > 0 && (
+            <TouchableOpacity style={styles.botonIconoTexto} onPress={borrarSeleccionadas}>
+              <Ionicons name="trash" size={20} color="#e74c3c" />
+              <Text style={[styles.textoBotonSecundario, {color: '#e74c3c'}]}>
+                ({seleccionadas.length})
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/*Lado Derecho: Boton Seleccionar Todas (Solo aparece si hay galeria) */}
+        <View style={[styles.mitadFila, {alignItems: 'flex-end'}]}>
+          {galeria.length > 0 && (
+            <TouchableOpacity style={styles.botonIconoTexto} onPress={seleccionarTodas}>
+              <Ionicons
+                //Si estan seleccionadas todas, cambia el icono a una 'X'
+                name={seleccionadas.length === galeria.length ? "close-circle-outline" : "checkmark-done-circle-outline"}
+                size={20}
+                color={seleccionadas.length === galeria.length ? "#7f8c8d" : "#005691"}
+              />
+              <Text style={[
+                styles.textoBotonSecundario,
+                { color: seleccionadas.length === galeria.length ? "#7f8c8d": "#005691"}
+              ]}>
+                {seleccionadas.length === galeria.length ? "Desmarcar" : "Seleccionar todo"}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* El modal solo es visible si  'fotoExpandida' tiene información (!== null) */}
+      <Modal visible={fotoExpandida !== null} transparent={true} animationType="fade">
+        <View style={styles.fondoModal}>
+          {/* Boton flotante para cerrar. Al presionarlo, limpiamos el estado de 'fotoExpandida' */}
+          <TouchableOpacity style={styles.botonCerrarModal} onPress={() => setFotoExpandida(null)}>
+            <Ionicons name="close-circle" size={40} color="white" />
           </TouchableOpacity>
-        )}
-      />
+
+          {/* Mostramos la imagen. 'resizeMode = "contain" asegura que la foto se ajuste a la pantalla sin deformarse*/}
+          <Image source={{uri: fotoExpandida}} style={styles.imagenCompleta} resizeMode="contain" />
+        </View>
+      </Modal>
+    
     </View>
   );
 }
 
-// ZONA DE ESTILOS (El diseño visual estructurado)
+// ESTILOS VISUALES
+
 const styles = StyleSheet.create({
-  contenedor: {
-    flex: 1, // Toma todo el alto disponible de la pantalla del celular
-    backgroundColor: '#ffffff', // Fondo totalmente blanco
-    paddingTop: 60, // Da un margen superior grande para que la app no se encime con el reloj o la cámara del celular
-    paddingHorizontal: 20, // Márgenes a los lados para que nada pegue con los bordes de la pantalla
+  contenedor: { flex: 1, backgroundColor: '#f8f9fa', paddingTop: 60 },
+  encabezado: { alignItems: 'center', marginBottom: 15 }, 
+  titulo: { fontSize: 28, fontWeight: 'bold', color: '#2c3e50' },
+  contadorTexto: { fontSize: 16, color: '#7f8c8d', marginTop: 2 },
+  
+  lista: { paddingHorizontal: 15 },
+  estadoVacio: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  textoVacio: { fontSize: 18, color: '#bdc3c7', marginTop: 10 },
+  
+  contenedorFoto: { flex: 1, margin: 5, position: 'relative' },
+  imagen: { width: '100%', height: 180, borderRadius: 12 },
+  // Estilo aplicado dinámicamente cuando la foto entra al arreglo de 'seleccionadas'
+  imagenSeleccionada: { borderWidth: 4, borderColor: '#e74c3c', opacity: 0.7 },
+  checkOverlay: { position: 'absolute', top: 10, right: 10, backgroundColor: 'white', borderRadius: 12 },
+
+  contenedorControlesAbajo: {
+    paddingTop: 15,
+    paddingBottom: 35, 
+    paddingHorizontal: 20,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderColor: '#e0e0e0',
+    alignItems: 'center',
   },
-  titulo: {
-    fontSize: 24, // Tamaño de letra para el encabezado
-    fontWeight: 'bold', // Tipografía en negrita
-    marginBottom: 20, // Separación inferior para que no se pegue con la caja de texto
-    textAlign: 'center', // Centrado perfecto
-    color: '#333', // Un gris muy oscuro (más elegante que el negro puro)
+  botonPrincipal: {
+    flexDirection: 'row',
+    backgroundColor: '#005691',
+    paddingVertical: 15,
+    paddingHorizontal: 40,
+    borderRadius: 30,
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
-  zonaInput: {
-    flexDirection: 'row', // Regla de Flexbox vital: Coloca el Input y el Botón uno al lado del otro (horizontal)
-    justifyContent: 'space-between', // Separa los elementos empujándolos a los extremos
-    marginBottom: 20, // Separación inferior con el inicio de la lista
+  botonPrincipalDeshabilitado: {
+    backgroundColor: '#bdc3c7',
   },
-  input: {
-    flex: 1, // Le dice a la caja de texto: "Toma todo el espacio sobrante que el botón no esté usando"
-    borderWidth: 1, // Dibuja una línea de borde
-    borderColor: '#cccccc', // Color gris claro para el borde
-    borderRadius: 8, // Esquinas redondeadas suaves
-    paddingHorizontal: 15, // Espacio interno para que el texto que escriben no pegue con el borde
-    marginRight: 10, // Separación a la derecha para no chocar físicamente con el botón "Agregar"
-    height: 45, // Altura cómoda para que el dedo del usuario pueda tocarla sin problema
+  textoBotonPrincipal: { color: 'white', fontSize: 18, fontWeight: 'bold', marginLeft: 10 },
+  
+  filaSecundaria: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: 20, 
   },
-  cajaTarea: {
-    backgroundColor: '#f9f9f9', // Fondo ligeramente gris para separar visualmente cada tarea del fondo blanco
-    padding: 15, // Espacio interno para que el texto de la tarea respire
-    borderRadius: 8, // Esquinas redondeadas
-    marginBottom: 10, // Espacio entre una tarea y la que sigue abajo
-    borderWidth: 1, // Borde perimetral
-    borderColor: '#eeeeee', // Gris ultra claro para un diseño limpio
+  mitadFila: {
+    flex: 1, 
   },
-  textoTarea: {
-    fontSize: 16, // Tamaño de lectura estándar en móviles
-    color: '#444', // Gris oscuro para buen contraste y legibilidad
-  }
+  botonIconoTexto: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  textoBotonSecundario: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    marginLeft: 6,
+  },
+
+  fondoModal: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.9)', justifyContent: 'center', alignItems: 'center' },
+  botonCerrarModal: { position: 'absolute', top: 50, right: 20, zIndex: 10 },
+  imagenCompleta: { width: '100%', height: '80%' }
 });
