@@ -1,146 +1,308 @@
-// Sirve para crear la "memoria" de la aplicación.
-// Permite que la pantalla se actualice automáticamente cuando los datos cambian.
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, FlatList, Image, ActivityIndicator,
+  Keyboard, Animated} from 'react-native';
+import {Ionicons} from '@expo/vector-icons'; 
+import { Audio } from 'expo-av';
 
-// Importamos los componentes preconstruidos de React Native
-import { 
-  StyleSheet,       // Para crear los estilos (es el motor de CSS de React Native).
-  Text,             // Para mostrar cualquier texto en pantalla.
-  View,             // El contenedor principal .
-  TextInput,        // La caja donde el usuario escribe (equivalente a <input type="text">).
-  Button,           // Un botón nativo.
-  FlatList,         // Una lista inteligente que solo renderiza los elementos que caben en pantalla.
-  TouchableOpacity  // Un contenedor que hace que su contenido reaccione al toque oscureciéndose.
-} from 'react-native';
+export default function App(){
 
-// FUNCIÓN PRINCIPAL El componente que representa la pantalla entera
-export default function App() {
-  
-  // ZONA DE ESTADOS (La memoria a corto plazo la nuestra app)
-   
-  // 'tarea' guarda lo que el usuario está escribiendo en el momento.
-  // 'setTarea' es la función que usamos para modificar ese texto.
-  // Inicia como un texto completamente vacío: ''.
-  const [tarea, setTarea] = useState('');
-  
-  // Estado para la lista completa:
-  // 'listaTareas' guarda todo el historial de tareas creadas.
-  // 'setListaTareas' es la función para actualizar esa lista general.
-  // Inicia como un arreglo vacío: [].
-  const [listaTareas, setListaTareas] = useState([]);
+  const[busqueda, setBusqueda] = useState('');
+  const[resultado, setResultado] = useState([]);
+  const[cargando, setCargando] = useState(false);
 
-  // ZONA DE LÓGICA - las acciones del usuario
+  const[cancionActiva, setCancionActiva] = useState(null);
+  const[sonidoActual, setsonidoActual] = useState(null);
+  const[estaReproduciendo, setEstaReproduciendo] = useState(false);
 
-  // Función cuando el usuario presiona el botón "Agregar"
-  const agregarTarea = () => {
-    // .trim() quita los espacios en blanco al inicio y al final.
-    // Si después de quitar espacios el texto está vacío, usamos 'return' para detener la función
-    // y evitar que se agreguen "tareas invisibles" a la lista.
-    if (tarea.trim() === '') return; 
-    
-    // Actualizamos la lista de tareas poniendo el nuevo dato:
-    // Usamos el operador de propagación (...) para copiar todas las tareas viejas que ya existían.
-    // Agregamos un nuevo objeto al final con dos propiedades fundamentales:
-    //  -id: Usamos Date.now().toString() para generar un identificador único basado 
-    //  en los milisegundos de la hora exacta.
-    //  -texto: El contenido que el usuario escribió (que está guardado en la variable 'tarea').
-    setListaTareas([...listaTareas, { id: Date.now().toString(), texto: tarea }]);
-    
-    // Una vez guardada la tarea en la lista, limpiamos la caja de texto
-    // devolviendo el estado 'tarea' a un string vacío.
-    setTarea('');
+  const animacionEcualizador = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    animacionEcualizador.stopAnimation();
+    animacionEcualizador.setValue(0);
+
+    if(estaReproduciendo){
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(animacionEcualizador,{toValue: 1, duration: 300, useNativeDriver: false}),
+          Animated.timing(animacionEcualizador,{toValue: 0, duration: 300, useNativeDriver: false}),
+        ])
+      ).start();
+    }
+  }, [estaReproduciendo,cancionActiva]);
+
+  const altoBarra1 = animacionEcualizador.interpolate({inputRange: [0, 1], outputRange: [8,22]});
+  const altoBarra2 = animacionEcualizador.interpolate({inputRange: [0, 1], outputRange: [24,10]});
+  const altoBarra3 = animacionEcualizador.interpolate({inputRange: [0, 1], outputRange: [12,18]});
+
+  const buscarMusica = async () => {
+    if(busqueda.trim() === '') return;
+
+    Keyboard.dismiss();
+    setCargando(true);
+
+    try{
+      const terminoLimpio = busqueda.replace(/ /g,'+');
+      const url =`https://itunes.apple.com/search?term=${terminoLimpio}&media=music&limit=30`;
+
+      const respuesta = await fetch(url);
+      const json = await respuesta.json();
+      setResultado(json.results);
+    }catch(error){
+      console.error(error);
+    }finally{
+      setCargando(false);
+    }
   };
 
-  // ZONA DE RENDERIZADO lo que el usuario ve en la pantalla de su teléfono
-  return (
-    // 'View' es el contenedor padre que envuelve a toda la aplicación
-    <View style={styles.contenedor}>
-      
-      {/* Título principal de la aplicación */}
-      <Text style={styles.titulo}>Mis Tareas Pendientes</Text>
+  const monitorDeReproduccion = (estado) => {
+    if(estado.didJustFinish){
+      setEstaReproduciendo(false);
+      setCancionActiva(null);
+    }
+  };
 
-      {/* Contenedor agrupar la caja de texto y el botón en la misma línea */}
-      <View style={styles.zonaInput}>
-        
-        {/* Caja de texto interactiva */}
-        <TextInput 
-          style={styles.input}
-          placeholder="Escribe una tarea..." // Texto fantasma de ayuda cuando está vacío
-          value={tarea} // Conectamos el valor visible de la caja a nuestra variable de memoria 'tarea'
-          
-          // Cada vez que el usuario teclea una letra, 
-          // actualizamos el estado 'tarea' inmediatamente.
-          onChangeText={setTarea} 
-        />
-        
-        {/* Botón que dispara la lógica de guardado */}
-        <Button 
-          title="Agregar" 
-          onPress={agregarTarea} // Evento de toque 
-          color="#005691" 
-        />
+  const reproducirCancion = async (cancion) => {
+    try{
+      if(sonidoActual){
+        await sonidoActual.unloadAsync();
+      }
+      setCancionActiva(cancion);
+      setEstaReproduciendo(true);
+
+      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true});
+
+      const {sound} = await Audio.Sound.createAsync(
+        {uri: cancion.previewUrl},
+        { shouldPlay: true},
+        monitorDeReproduccion
+      );
+      setsonidoActual(sound);
+    }catch(error){
+      console.log("Error  al reproducir: ", error);
+    }
+  };
+
+  const alternarPlayPause = async() => {
+    if(!sonidoActual) return;
+
+    if(estaReproduciendo){
+      await sonidoActual.pauseAsync();
+      setEstaReproduciendo(false);
+    }else{
+      await sonidoActual.playAsync();
+      setEstaReproduciendo(true);
+    }
+  };
+  
+  useEffect(() => {
+    return sonidoActual ? () => {sonidoActual.unloadAsync(); } : undefined;
+  }, [sonidoActual]);
+
+  return(
+    <View style={styles.contenedor}>
+      <View style ={styles.encabezado}>
+        <Text style={styles.tituloHeader}>Explorar Musica</Text>
+        <View style = {styles.contenedorBusqueda}>
+          <TextInput
+            style = {styles.input}
+            placeholder="Bucar Cancion o artista..."
+            placeholderTextColor="#888"
+            value={busqueda}
+            onChangeText = {setBusqueda}
+            onSubmitEditing ={buscarMusica}
+          />
+          <TouchableOpacity style = {styles.botonBuscar} onPress={buscarMusica}>
+            <Ionicons name ="search" size={24} color="white" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Lista inteligente y optimizada para móviles */}
-      <FlatList 
-        // 'data' responde a la pregunta: ¿De dónde saco la información? 
-        data={listaTareas} 
-        
-        // 'keyExtractor' responde a: ¿Cómo identifico cada elemento de forma única para no confundirme?
-        keyExtractor={(item) => item.id} 
-        
-        // 'renderItem' responde a: ¿Cómo quieres que dibuje visualmente cada elemento de la lista?
-        renderItem={({ item }) => (
-          // Usamos TouchableOpacity para que los alumnos vean cómo reacciona al toque
-          <TouchableOpacity style={styles.cajaTarea}>
-            {/* Extraemos e imprimimos la propiedad 'texto' del objeto actual */}
-            <Text style={styles.textoTarea}>{item.texto}</Text>
-          </TouchableOpacity>
-        )}
-      />
+      {cargando ? (
+        <View style={styles.zonaCentrada}>
+          <ActivityIndicator size = "large" color="#A259FF" />
+        </View>
+      ) : (
+        <FlatList
+          data= {resultado}
+          keyExtractor={(item) => item.trackId.toString()}
+
+          contentContainerStyle={{paddingBottom: cancionActiva ? 90 : 20}}
+          renderItem={({item}) => {
+
+            const esLaActiva = cancionActiva?.trackId === item.trackId;
+
+            return (
+              <TouchableOpacity style={styles.tarjetaCancion} onPress={() => reproducirCancion(item)}>
+                <Image source={{uri: item.artworkUrl100}} style={styles.portada}/>
+                <View style ={styles.infoCancion}>
+                  <Text style={[styles.tituloCancion, esLaActiva && { color: '#A259FF'}]} numberOfLines={1}>
+                    {item.trackName}
+                  </Text> 
+                  <Text style={styles.artistaCancion} numberOfLines={1}>{item.artistName}</Text>
+                </View>
+
+                {esLaActiva && estaReproduciendo ?(
+                  <View style = {styles.contenedorEcualizador}>
+                    <Animated.View style={[styles.barraEcualizador, { height: altoBarra1}]}/>
+                    <Animated.View style={[styles.barraEcualizador, { height: altoBarra2}]}/>
+                    <Animated.View style={[styles.barraEcualizador, { height: altoBarra3}]}/>
+                  </View>
+                ) : (
+                  <Ionicons name = "play-circle" size={32} color={esLaActiva ? "#A259FF": "#444"} />
+                )}
+              </TouchableOpacity>
+            )
+          }}
+        />
+      )}
+
+      {cancionActiva && (
+        <View style={styles.miniReproductor}>
+          <View style={styles.inferiorMiniReproductor}>
+
+            <Image source={{uri: cancionActiva.artworkUrl100}} style={styles.portadaMini} />
+
+            <View style={styles.infoMini}>
+              <Text style={styles.tituloMini} numberOfLines={1}>{cancionActiva.trackName}</Text>
+              <Text style={styles.artistaMini} numberOfLines={1}>{cancionActiva.artistName}</Text>
+            </View>
+
+            <TouchableOpacity onPress={alternarPlayPause} style={styles.botonPlayPause}>
+              <Ionicons
+                name= {estaReproduciendo ? "pause-circle" : "play-circle"}
+                size= {40}
+                color="white"
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+      )}
     </View>
   );
-}
+} 
 
-// ZONA DE ESTILOS (El diseño visual estructurado)
+// --- ESTILOS ---
 const styles = StyleSheet.create({
   contenedor: {
-    flex: 1, // Toma todo el alto disponible de la pantalla del celular
-    backgroundColor: '#ffffff', // Fondo totalmente blanco
-    paddingTop: 60, // Da un margen superior grande para que la app no se encime con el reloj o la cámara del celular
-    paddingHorizontal: 20, // Márgenes a los lados para que nada pegue con los bordes de la pantalla
+    flex: 1,
+    backgroundColor: '#121212',
+    paddingTop: 45
   },
-  titulo: {
-    fontSize: 24, // Tamaño de letra para el encabezado
-    fontWeight: 'bold', // Tipografía en negrita
-    marginBottom: 20, // Separación inferior para que no se pegue con la caja de texto
-    textAlign: 'center', // Centrado perfecto
-    color: '#333', // Un gris muy oscuro (más elegante que el negro puro)
+  encabezado: {
+    paddingHorizontal: 20,
+    paddingBottom: 15,
   },
-  zonaInput: {
-    flexDirection: 'row', // Regla de Flexbox vital: Coloca el Input y el Botón uno al lado del otro (horizontal)
-    justifyContent: 'space-between', // Separa los elementos empujándolos a los extremos
-    marginBottom: 20, // Separación inferior con el inicio de la lista
+  tituloHeader: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FFF',
+    marginBottom: 15,
+  },
+  contenedorBusqueda: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 50,
   },
   input: {
-    flex: 1, // Le dice a la caja de texto: "Toma todo el espacio sobrante que el botón no esté usando"
-    borderWidth: 1, // Dibuja una línea de borde
-    borderColor: '#cccccc', // Color gris claro para el borde
-    borderRadius: 8, // Esquinas redondeadas suaves
-    paddingHorizontal: 15, // Espacio interno para que el texto que escriben no pegue con el borde
-    marginRight: 10, // Separación a la derecha para no chocar físicamente con el botón "Agregar"
-    height: 45, // Altura cómoda para que el dedo del usuario pueda tocarla sin problema
+    flex: 1,
+    color: '#FFF',
+    fontSize: 16,
   },
-  cajaTarea: {
-    backgroundColor: '#f9f9f9', // Fondo ligeramente gris para separar visualmente cada tarea del fondo blanco
-    padding: 15, // Espacio interno para que el texto de la tarea respire
-    borderRadius: 8, // Esquinas redondeadas
-    marginBottom: 10, // Espacio entre una tarea y la que sigue abajo
-    borderWidth: 1, // Borde perimetral
-    borderColor: '#eeeeee', // Gris ultra claro para un diseño limpio
+  botonBuscar: {
+    padding: 8,
+    backgroundColor: '#A259FF',
+    borderRadius: 8,
+    marginLeft: 10,
   },
-  textoTarea: {
-    fontSize: 16, // Tamaño de lectura estándar en móviles
-    color: '#444', // Gris oscuro para buen contraste y legibilidad
+  zonaCentrada: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tarjetaCancion: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 15,
+    marginHorizontal: 20,
+    marginBottom: 10,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+  },
+  portada: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+  },
+  infoCancion: {
+    flex: 1,
+    marginLeft: 15,
+    justifyContent: 'center',
+  },
+  tituloCancion: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFF',
+    marginBottom: 4,
+  },
+  artistaCancion: {
+    fontSize: 14,
+    color: '#AAA',
+  },
+  contenedorEcualizador: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 24,
+    width: 32,
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+  },
+  barraEcualizador: {
+    width: 4,
+    backgroundColor: '#A259FF',
+    borderRadius: 2,
+  },
+  miniReproductor: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#2C2C2E',
+    padding: 15,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 10,
+  },
+  inferiorMiniReproductor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  portadaMini: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+  },
+  infoMini: {
+    flex: 1,
+    marginLeft: 15,
+  },
+  tituloMini: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFF',
+  },
+  artistaMini: {
+    fontSize: 14,
+    color: '#CCC',
+  },
+  botonPlayPause: {
+    padding: 5,
   }
 });
