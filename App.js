@@ -1,14 +1,14 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import TabNavigator from './src/navigation/TabNavigator';
-import { CartProvider } from './src/context/CartContext';
+import { InventarioProvider } from './src/context/InventarioContext';
 
 export default function App() {
   return (
-    <CartProvider>
+    <InventarioProvider>
       <NavigationContainer>
         <TabNavigator />
       </NavigationContainer>
-    </CartProvider>
+    </InventarioProvider>
   );
 }
