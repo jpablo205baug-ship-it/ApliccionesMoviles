@@ -1,73 +1,66 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert } from 'react-native';
-// importamos nuestra variable auth ya configurada
+// importamos nuestra variable auth
 import { auth } from '../credenciales/firebaseConfig';
-// importamos la funcion de firebase exclusiva para crear cuentas nuevas
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+// importamos la funcion de firebase exclusiva para iniciar sesion
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
-export default function PantallaRegistro({ navigation }) {
-  // estados temporales para capturar lo que el usuario escribe
+export default function PantallaLogin({ navigation }) {
   const [correo, setCorreo] = useState('');
   const [password, setPassword] = useState('');
 
-  // esta funcion se activa al presionar el boton "registrarme"
-  const registrarUsuario = async () => {
-    // validacion basica: evitamos enviar datos vacios a la nube
+  const iniciarSesion = async () => {
+    // validamos que los campos no esten vacios
     if (correo === '' || password === '') {
-      Alert.alert('error', 'todos los campos son obligatorios');
+      Alert.alert('error', 'ingresa tu correo y contraseña');
       return;
     }
 
     try {
-      // abrimos un bloque try-catch porque la comunicacion con la nube puede fallar
-      // (ej. no hay internet, el correo ya existe, contraseña muy corta)
-
       // =========================================================
-      // reto 2: crear usuario en la nube
+      // reto 3: iniciar sesion en la nube
       // =========================================================
-      // instrucciones: utiliza la funcion createUserWithEmailAndPassword
-      // esta funcion necesita tres ingredientes: la variable auth, el correo y el password.
-      // al ser una operacion en la nube, es asincrona. no olvides la palabra await.
+      // instrucciones: utiliza la funcion signInWithEmailAndPassword.
+      // pasale los tres parametros requeridos: auth, correo, password.
+      // recuerda usar await porque la aplicacion debe esperar la respuesta del servidor.
       
       // escribe tu codigo aqui abajo:
-      await createUserWithEmailAndPassword(auth, correo, password);
+      signInWithEmailAndPassword(auth, correo, password);
       // =========================================================
-      
-      Alert.alert('exito', 'usuario registrado en firebase');
     } catch (error) {
-      // si firebase rechaza el registro, cachamos el error y lo mostramos
-      Alert.alert('error al registrar', error.message);
+      // si la contraseña es incorrecta o el usuario no existe, entra aqui
+      Alert.alert('credenciales incorrectas', 'el correo o contraseña no son validos');
     }
   };
 
   return (
     <View style={styles.contenedor}>
-      <Text style={styles.titulo}>crear cuenta</Text>
+      <Text style={styles.titulo}>iniciar sesion</Text>
       
       <TextInput 
         style={styles.input} 
         placeholder="correo electronico" 
         placeholderTextColor="#666" 
         keyboardType="email-address"
-        autoCapitalize="none"
+        autoCapitalize="none" // importante para que el celular no empiece con mayuscula automatica
         value={correo} 
         onChangeText={setCorreo} 
       />
       <TextInput 
         style={styles.input} 
-        placeholder="contraseña (minimo 6 caracteres)" 
+        placeholder="contraseña" 
         placeholderTextColor="#666" 
-        secureTextEntry 
+        secureTextEntry // esta propiedad oculta los caracteres con puntitos
         value={password} 
         onChangeText={setPassword} 
       />
 
-      <TouchableOpacity style={styles.botonPrincipal} onPress={registrarUsuario}>
-        <Text style={styles.textoBoton}>registrarme</Text>
+      <TouchableOpacity style={styles.botonPrincipal} onPress={iniciarSesion}>
+        <Text style={styles.textoBoton}>entrar</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 20 }}>
-        <Text style={styles.textoSecundario}>ya tengo cuenta. volver al login</Text>
+      <TouchableOpacity onPress={() => navigation.navigate('Registro')} style={{ marginTop: 20 }}>
+        <Text style={styles.textoSecundario}>¿no tienes cuenta? registrate aqui</Text>
       </TouchableOpacity>
     </View>
   );
